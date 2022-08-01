@@ -22,15 +22,22 @@ namespace Client
             Console.WriteLine($"connectionString = {connectionString}");
             Console.WriteLine($"requestInputQueue = {requestInputQueue}");
 
-            // // Get values from the config given their key and their target type.
-            // int keyOneValue = config.GetValue<int>("KeyOne");
-            // bool keyTwoValue = config.GetValue<bool>("KeyTwo");
-            // string keyThreeNestedValue = config.GetValue<string>("KeyThree:Message");
+            QueueClient queueClient = new QueueClient(connectionString, requestInputQueue);
 
-            // // Write the values to the console.
-            // Console.WriteLine($"KeyOne = {keyOneValue}");
-            // Console.WriteLine($"KeyTwo = {keyTwoValue}");
-            // Console.WriteLine($"KeyThree:Message = {keyThreeNestedValue}");
+            if (args.Length > 0)
+            {
+                string value = String.Join(" ", args);
+                await InsertMessageAsync(queueClient, value);
+                Console.WriteLine($"Sent: {value}");
+            }
+            else
+            {
+                string value = await RetrieveNextMessageAsync(queueClient);
+                Console.WriteLine($"Received: {value}");
+            }
+
+            Console.Write("Press Enter...");
+            Console.ReadLine();
 
             await host.RunAsync();
         }
@@ -50,6 +57,53 @@ namespace Client
                 {
 
                 });
+
+        static async Task InsertMessageAsync(QueueClient theQueue, string newMessage)
+        {
+            if (null != await theQueue.CreateIfNotExistsAsync())
+            {
+                Console.WriteLine("The queue was created.");
+            }
+
+            await theQueue.SendMessageAsync(newMessage);
+        }
+
+        static async Task<string> RetrieveNextMessageAsync(QueueClient theQueue)
+        {
+            if (await theQueue.ExistsAsync())
+            {
+                QueueProperties properties = await theQueue.GetPropertiesAsync();
+
+                if (properties.ApproximateMessagesCount > 0)
+                {
+                    QueueMessage[] retrievedMessage = await theQueue.ReceiveMessagesAsync(1);
+                    string theMessage = retrievedMessage[0].Body.ToString();
+                    await theQueue.DeleteMessageAsync(retrievedMessage[0].MessageId, retrievedMessage[0].PopReceipt);
+                    return theMessage;
+                }
+                else
+                {
+                    Console.Write("The queue is empty. Attempt to delete it? (Y/N) ");
+                    string response = Console.ReadLine();
+
+                    if (response?.ToUpper() == "Y")
+                    {
+                        await theQueue.DeleteIfExistsAsync();
+                        return "The queue was deleted.";
+                    }
+                    else
+                    {
+                        return "The queue was not deleted.";
+                    }
+                }
+            }
+            else
+            {
+                return "The queue does not exist. Add a message to the command line to create the queue and store the message.";
+            }
+        }
+
+
     }
 }
 
